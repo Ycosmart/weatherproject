@@ -1,39 +1,56 @@
+import os
 import requests
 import pandas as pd
+from  dotenv import load_dotenv
 
-api_key = 'fc438aca992dd0f30dc812e036439b2e' 
-cidades = ['Lisboa', 'Madrid', 'Paris', 'Berlim', 'Londres', 'Zurique', 'Copenhaga', 'Bruxelas', 'Viena', 'Roma']
+load_dotenv()
+
+# Load the API key from environment variables
+api_key = os.getenv('WEATHER_API_KEY')
+
+if not api_key:
+    raise ValueError("API key not found. Please set the WEATHER_API_KEY environment variable.")
+
+cities = [
+    'Lisbon', 'Madrid', 'Paris', 'Berlin', 'London',
+    'Zurich', 'Copenhagen', 'Brussels', 'Vienna', 'Rome'
+]
 
 
-#Function to get all the coordinates of the cities
-def obter_coordenadas(cidades, api_key):
-    coordenadas = {}
-    
-    for cidade in cidades:
+# Function to get the coordinates of the cities
+def get_coordinates(cities, api_key):
+    coordinates = {}
+
+    for city in cities:
         try:
-            url = f'http://api.openweathermap.org/geo/1.0/direct?q={cidade}&appid={api_key}'
+            url = f'http://api.openweathermap.org/geo/1.0/direct?q={city}&appid={api_key}'
             response = requests.get(url)
             data = response.json()
-            
+
             if len(data) > 0:
-                lat = data[0]['lat']  
-                lon = data[0]['lon'] 
-                coordenadas[cidade] = {'latitude': lat, 'longitude': lon}
+                lat = data[0]['lat']
+                lon = data[0]['lon']
+                coordinates[city] = {'latitude': lat, 'longitude': lon}
             else:
-                print(f"Cidade {cidade} não encontrada.")
-        
+                print(f"City {city} not found.")
+
         except Exception as e:
-            print(f"Ocorreu um erro ao buscar a cidade {cidade}: {e}")
-    
-    return coordenadas
+            print(f"An error occurred while fetching the city {city}: {e}")
 
-#Function to call the API and get JSON response
-def Api_call(lat, lon, api_key):
-    url_current_call = f'https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric'
+    return coordinates
+
+
+# Function to call the API and get the JSON response
+def api_call(lat, lon, api_key):
+    url_current_call = (
+        f'https://api.openweathermap.org/data/2.5/weather'
+        f'?lat={lat}&lon={lon}&appid={api_key}&units=metric'
+    )
     response = requests.get(url_current_call)
-    return response.json()  
+    return response.json()
 
-#Function to extract the intended data from the JSON response
+
+# Function to extract the desired data from the JSON response
 def save_dicts(data):
     combined_dicts = []
 
@@ -45,33 +62,36 @@ def save_dicts(data):
     wind_dict = data['wind']
     rain_dict = data.get('rain', {})
     sys_dict = data['sys']
-    
-    combined_dict = {**weather_dict, **main_dict, **wind_dict, **sys_dict, **rain_dict}
+
+    combined_dict = {
+        **weather_dict, **main_dict, **wind_dict,
+        **sys_dict, **rain_dict
+    }
 
     combined_dicts.append(combined_dict)
 
     return combined_dicts
 
 
-coordenadas = obter_coordenadas(cidades, api_key)
+# Get city coordinates
+coordinates = get_coordinates(cities, api_key)
 
-#Loop to iterate over all cities and make API calls to combine the data
+# Loop to iterate over all cities and make API calls
 all_data = []
 
-for cidade, coords in coordenadas.items():
+for city, coords in coordinates.items():
     lat = coords['latitude']
     lon = coords['longitude']
-        
-    dados_clima = Api_call(lat, lon, api_key)
-    
-    dados_finais = save_dicts(dados_clima)
-    
-    all_data.extend(dados_finais)
 
-#Creating dataframe
+    weather_data = api_call(lat, lon, api_key)
+    final_data = save_dicts(weather_data)
+
+    all_data.extend(final_data)
+
+# Create DataFrame
 df = pd.DataFrame(all_data)
 
-#Cleaning data
+# Clean data
 df['speed'] = df['speed'] * 3.6
 df['speed'] = df['speed'].round(0).astype(int)
 df['temp'] = df['temp'].round(0).astype(int)
@@ -90,6 +110,7 @@ df['sunrise'] = df['sunrise'].dt.tz_localize(None)
 df['sunset'] = df['sunset'].dt.tz_localize(None)
 df['description'] = df['description'].str.upper()
 
+# Mapping weather description to cloud codes
 description_map = {
     'FEW CLOUDS': 1,
     'CLEAR SKY': 2,
@@ -98,18 +119,10 @@ description_map = {
     'SCATTERED CLOUDS': 4,
     'OVERCAST CLOUDS': 4,
     'LIGHT INTENSITY SHOWER RAIN': 5,
-    'MODERATE RAIN': 5 
+    'MODERATE RAIN': 5
 }
 
 df['clouds_code'] = df['description'].map(description_map)
 
-print(df[['country', 'temp', 'main', 'description', 'clouds_code',]])
-
-
-
-
-    
-    
-
-
-
+# Print relevant data
+print(df[['country', 'temp', 'main', 'description', 'clouds_code']])
